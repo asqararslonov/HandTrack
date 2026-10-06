@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FingerMix — Fingers as Filter Dials</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Canvas references these by url(), keeping both effects on the GPU —
+       see PhotoShoot/README.md for why a per-pixel JS pass doesn't scale
+       once several filters layer on the same frame. -->
+  <svg class="defs" aria-hidden="true">
+    <filter id="fm-posterize" color-interpolation-filters="sRGB">
+      <feComponentTransfer>
+        <feFuncR type="discrete" tableValues="0 0.25 0.5 0.75 1" />
+        <feFuncG type="discrete" tableValues="0 0.25 0.5 0.75 1" />
+        <feFuncB type="discrete" tableValues="0 0.25 0.5 0.75 1" />
+      </feComponentTransfer>
+    </filter>
+    <filter id="fm-thermal" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="
+        0.30 0.59 0.11 0 0
+        0.30 0.59 0.11 0 0
+        0.30 0.59 0.11 0 0
+        0    0    0    1 0" />
+      <feComponentTransfer>
+        <feFuncR type="table" tableValues="0 0.15 0.65 1 1" />
+        <feFuncG type="table" tableValues="0 0 0.15 0.7 1" />
+        <feFuncB type="table" tableValues="0.15 0.7 0.85 0.35 1" />
+      </feComponentTransfer>
+    </filter>
+  </svg>
+
+  <main class="app">
+    <section class="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="status" class="status">Loading hand model…</div>
+      <button id="start" class="start" hidden>Start camera</button>
+      <div class="fps"><span id="fps">0</span> fps</div>
+      <div id="fullmix" class="fullmix">🖐 Full mix</div>
+    </section>
+
+    <aside class="panel">
+      <h1>FingerMix</h1>
+      <p class="blurb">
+        Each finger is a filter dial. Curl it in and the filter fades out;
+        extend it and the filter fades in — mix several at once.
+      </p>
+
+      <h1 class="spaced">Dials</h1>
+      <div id="meters" class="meters"></div>
+    </aside>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

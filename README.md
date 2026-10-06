@@ -47,6 +47,20 @@ matching fingertips.
 
 </td>
 </tr>
+<tr>
+<td width="220"><img src="FingerMix/docs/mix-demo.jpg" width="200" alt="Thermal, Sepia and Arctic filters blended via finger dials"></td>
+<td>
+
+### [FingerMix](FingerMix/)
+Each finger is a filter dial — curl it in and the filter fades out, extend
+it and it fades in. Thumb is Thermal, index Sepia, middle Night Vision,
+ring Arctic, pinky Posterize. Open several fingers at once and the filters
+blend live instead of switching one at a time.
+
+**[Read the full writeup →](FingerMix/README.md)**
+
+</td>
+</tr>
 </table>
 
 More projects get added here as they're finished — each one gets its own
