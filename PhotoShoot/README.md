@@ -1,40 +1,68 @@
+<div align="center">
+
 # PhotoShoot
 
-Real-time hand tracking in the browser, no install, no backend. Started as a
-finger-counting demo and grew into a hand-reactive 3D particle field and a
-two-hand gesture that applies live video filters.
+**Real-time hand tracking in the browser — no install, no backend.**
+Started as a finger-counting demo, grew into a hand-reactive 3D particle
+field and a two-hand gesture that stacks live video filters.
 
-Runs entirely client-side: [MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)
-(WASM/GPU) does 21-point hand landmark detection; everything downstream —
-gesture recognition, physics, filters — is plain canvas/JS.
+[![MediaPipe](https://img.shields.io/badge/vision-MediaPipe%20Hand%20Landmarker-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)
+[![Canvas 2D](https://img.shields.io/badge/render-Canvas%202D-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](#)
+[![No backend](https://img.shields.io/badge/backend-none-success?style=flat-square)](#)
+
+</div>
 
 ```bash
 python3 -m http.server 5173
 open http://localhost:5173
 ```
 
+Runs entirely client-side: MediaPipe (WASM/GPU) does 21-point hand landmark
+detection; everything downstream — gesture recognition, physics, filters —
+is plain canvas/JS.
+
 ## What it does
 
-**Hand + finger detection** ([app.js](app.js)) — tracks up to 2 hands, reports
-which fingers are up, and recognizes a handful of static gestures (fist, open
-palm, peace, pointing, thumbs up, pinch, OK, rock, call-me). Finger state is
-computed from landmark distances rather than fixed angles, so it holds up
-across hand rotation.
+<table>
+<tr>
+<td width="50%">
+<img src="docs/field-3d.jpg" width="100%" alt="3D particle field">
+<sub><b>3D particle field</b> — perspective, depth-of-field, hand-driven forces</sub>
+</td>
+<td width="50%">
+<img src="docs/filter-stack.jpg" width="100%" alt="Stacked filter frames">
+<sub><b>Filter frame</b> — each two-hand gesture stacks another live-filtered region</sub>
+</td>
+</tr>
+</table>
 
-**3D particle field** ([field.js](field.js)) — 3,000 particles in a real
-depth volume, projected with perspective. Depth comes from on-screen hand
-size (landmark z is measured from the wrist, not the camera, so it's useless
-for this). Particles defocus into soft bokeh the further they sit from the
-focal plane, and hue shifts from warm to cool with distance — the two cues
-that make a point cloud read as a volume instead of a flat sprite sheet.
-Open palm repels, pinch creates a swirling vortex, closing then opening a
-fist fires an expanding shockwave.
+<div align="center">
+<img src="docs/filter-grid.jpg" width="640" alt="All eight filters">
+<br><sub>The eight filters in the cycle — Grayscale through Dream</sub>
+</div>
 
-**Filter frame** ([filters.js](filters.js)) — hold an L-shape with both hands
-(thumb + index out) and the rectangle between them gets a live filter. Drop
-your hands and it stays in place; frame again and a new rectangle stacks on
-top with the next filter in the cycle, so the frame fills up with regions
-instead of replacing the last one.
+### Hand + finger detection
+[`app.js`](app.js) — tracks up to 2 hands, reports which fingers are up, and
+recognizes a handful of static gestures (fist, open palm, peace, pointing,
+thumbs up, pinch, OK, rock, call-me). Finger state is computed from landmark
+distances rather than fixed angles, so it holds up across hand rotation.
+
+### 3D particle field
+[`field.js`](field.js) — 3,000 particles in a real depth volume, projected
+with perspective. Depth comes from on-screen hand size (landmark z is
+measured from the wrist, not the camera, so it's useless for this).
+Particles defocus into soft bokeh the further they sit from the focal
+plane, and hue shifts from warm to cool with distance — the two cues that
+make a point cloud read as a volume instead of a flat sprite sheet. Open
+palm repels, pinch creates a swirling vortex, closing then opening a fist
+fires an expanding shockwave.
+
+### Filter frame
+[`filters.js`](filters.js) — hold an L-shape with both hands (thumb + index
+out) and the rectangle between them gets a live filter. Drop your hands and
+it stays in place; frame again and a new rectangle stacks on top with the
+next filter in the cycle, so the frame fills up with regions instead of
+replacing the last one.
 
 ## The interesting bug
 
@@ -48,8 +76,8 @@ The fix wasn't optimizing the pixel loop (it already ran on a downscaled
 copy) — it was that `getImageData`/`putImageData` round-trips the GPU-backed
 canvas through the CPU, and that cost scales with call count, not pixel
 count. Rewriting both as SVG filters (`feComponentTransfer` for posterize,
-a luminance matrix + color ramp for thermal) referenced via `ctx.filter =
-"url(#id)"` keeps the whole pass on the GPU:
+a luminance matrix + color ramp for thermal) referenced via
+`ctx.filter = "url(#id)"` keeps the whole pass on the GPU:
 
 | | before | after |
 |---|---|---|
