@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Constellation — Hand Mesh</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <section class="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="status" class="status">Loading hand model…</div>
+      <button id="start" class="start" hidden>Start camera</button>
+      <div class="fps"><span id="fps">0</span> fps</div>
+      <div id="shapes" class="shapes"></div>
+      <div id="linked" class="linked">⚡ Hands linked</div>
+    </section>
+
+    <aside class="panel">
+      <h1>Constellation</h1>
+      <p class="blurb">
+        Every joint is a node. Fingertips wire together into a mesh, and
+        whichever fingers you raise close into a filled shape.
+      </p>
+
+      <h1 class="spaced">Shapes</h1>
+      <ul class="legend">
+        <li><b>1 finger</b> — point</li>
+        <li><b>2 fingers</b> — line</li>
+        <li><b>3 fingers</b> — triangle</li>
+        <li><b>4 fingers</b> — quad</li>
+        <li><b>5 fingers</b> — pentagon</li>
+      </ul>
+
+      <h1 class="spaced">Two hands</h1>
+      <ul class="legend">
+        <li>Matching raised fingers bridge across hands</li>
+        <li>Bring palms close to link them</li>
+      </ul>
+    </aside>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

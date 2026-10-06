@@ -33,6 +33,20 @@ gesture that stacks live video filters over the feed.
 
 </td>
 </tr>
+<tr>
+<td width="220"><img src="Constellation/docs/mesh-demo.jpg" width="200" alt="Hand mesh forming a triangle, bridged to a second hand"></td>
+<td>
+
+### [Constellation](Constellation/)
+Your hands as a live network: every joint is a node, fingertips wire
+together into a mesh, and whichever fingers you raise close into a filled
+shape — a triangle at 3 fingers, a pentagon at 5. Two hands bridge across
+matching fingertips.
+
+**[Read the full writeup →](Constellation/README.md)**
+
+</td>
+</tr>
 </table>
 
 More projects get added here as they're finished — each one gets its own
