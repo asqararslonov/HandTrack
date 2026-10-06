@@ -30,8 +30,8 @@ is plain canvas/JS.
 <sub><b>3D particle field</b> — perspective, depth-of-field, hand-driven forces</sub>
 </td>
 <td width="50%">
-<img src="docs/filter-stack.jpg" width="100%" alt="Stacked filter frames">
-<sub><b>Filter frame</b> — each two-hand gesture stacks another live-filtered region</sub>
+<img src="docs/filter-stack.jpg" width="100%" alt="Stacked filter frames with live hand tracking">
+<sub><b>Filter frame</b> — 7 stacked regions, live hand skeleton overlay, 30fps</sub>
 </td>
 </tr>
 </table>
