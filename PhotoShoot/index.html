@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PhotoShoot — Hand Tracking</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Canvas references these by url(), which keeps both effects on the GPU.
+       Doing them per-pixel in JS costs ~2.5ms per region, which a stack of a
+       dozen frames can't afford. -->
+  <svg class="defs" aria-hidden="true">
+    <filter id="f-posterize" color-interpolation-filters="sRGB">
+      <feComponentTransfer>
+        <feFuncR type="discrete" tableValues="0 0.25 0.5 0.75 1" />
+        <feFuncG type="discrete" tableValues="0 0.25 0.5 0.75 1" />
+        <feFuncB type="discrete" tableValues="0 0.25 0.5 0.75 1" />
+      </feComponentTransfer>
+    </filter>
+    <!-- Luminance first, then a black → blue → magenta → orange → white ramp. -->
+    <filter id="f-thermal" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="
+        0.30 0.59 0.11 0 0
+        0.30 0.59 0.11 0 0
+        0.30 0.59 0.11 0 0
+        0    0    0    1 0" />
+      <feComponentTransfer>
+        <feFuncR type="table" tableValues="0 0.15 0.65 1 1" />
+        <feFuncG type="table" tableValues="0 0 0.15 0.7 1" />
+        <feFuncB type="table" tableValues="0.15 0.7 0.85 0.35 1" />
+      </feComponentTransfer>
+    </filter>
+  </svg>
+
+  <main class="app">
+    <section class="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="field"></canvas>
+      <canvas id="fx"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="status" class="status">Loading hand model…</div>
+      <button id="start" class="start" hidden>Start camera</button>
+      <div class="fps"><span id="fps">0</span> fps</div>
+      <div id="label" class="label"></div>
+      <div class="modes">
+        <button data-mode="field" class="on">Force field</button>
+        <button data-mode="filter">Filter frame</button>
+        <button data-mode="inspect">Inspect</button>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <h1>Hands</h1>
+      <div id="hands" class="hands">
+        <p class="empty">Show your hand to the camera.</p>
+      </div>
+
+      <h1 class="spaced">Force field</h1>
+      <ul class="legend">
+        <li><b>🖐 Open palm</b> pushes particles away</li>
+        <li><b>🤏 Pinch</b> pulls them into a vortex</li>
+        <li><b>✊ → 🖐</b> fires a shockwave</li>
+      </ul>
+
+      <h1 class="spaced">Filter frame</h1>
+      <ul class="legend">
+        <li><b>Two 👆 L-shapes</b> frame a filtered region</li>
+        <li><b>Drop your hands</b> to lay it down</li>
+        <li><b>Frame again</b> to stack another, next filter</li>
+        <li><b>Open wide</b> to fill the whole screen</li>
+        <li><b>Z</b> removes the last · <b>Space</b> clears all</li>
+      </ul>
+    </aside>
+  </main>
+
+  <template id="hand-card">
+    <div class="hand">
+      <div class="hand-head">
+        <span class="side"></span>
+        <span class="count"></span>
+      </div>
+      <div class="gesture"></div>
+      <ul class="fingers">
+        <li data-f="thumb">Thumb</li>
+        <li data-f="index">Index</li>
+        <li data-f="middle">Middle</li>
+        <li data-f="ring">Ring</li>
+        <li data-f="pinky">Pinky</li>
+      </ul>
+    </div>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
