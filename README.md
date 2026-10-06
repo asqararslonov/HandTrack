@@ -11,7 +11,7 @@ No installs, no backend — everything runs live in the browser off the webcam.
 [![MediaPipe](https://img.shields.io/badge/vision-MediaPipe-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/edge/mediapipe)
 [![No backend](https://img.shields.io/badge/backend-none-success?style=flat-square)](#)
 
-<img src="PhotoShoot/docs/field-3d.jpg" width="820" alt="3D particle field reacting to hand position">
+<img src="Constellation/docs/mesh-demo.jpg" width="820" alt="Hand mesh forming a triangle, bridged to a second hand">
 
 </div>
 
@@ -25,9 +25,8 @@ No installs, no backend — everything runs live in the browser off the webcam.
 <td>
 
 ### [PhotoShoot](PhotoShoot/)
-Real-time hand & finger tracking (MediaPipe), a hand-reactive 3D particle
-field with perspective and depth-of-field, and a two-hand "director's frame"
-gesture that stacks live video filters over the feed.
+Real-time hand & finger tracking (MediaPipe) and a two-hand "director's
+frame" gesture that stacks live video filters over the feed.
 
 **[Read the full writeup →](PhotoShoot/README.md)**
 

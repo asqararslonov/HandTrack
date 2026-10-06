@@ -3,7 +3,6 @@ import {
   FilesetResolver,
   DrawingUtils,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { Field } from "./field.js";
 import { FilterFrame } from "./filters.js";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
@@ -13,8 +12,6 @@ const MODEL =
 const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
 const ctx = canvas.getContext("2d");
-const fieldCanvas = document.getElementById("field");
-const fieldCtx = fieldCanvas.getContext("2d");
 const fxCanvas = document.getElementById("fx");
 const fxCtx = fxCanvas.getContext("2d");
 const labelEl = document.getElementById("label");
@@ -40,13 +37,10 @@ const TIP_COLORS = {
   ring: "#60a5fa",
   pinky: "#c084fc",
 };
-const PALM = [0, 5, 9, 13, 17];
 
 let landmarker;
-let field;
 const frame = new FilterFrame();
-let mode = "field";
-const wasFist = { Left: false, Right: false };
+let mode = "filter";
 
 // ---------- geometry ----------
 
@@ -95,73 +89,6 @@ function analyze(lm, reportedSide) {
     count: Object.values(up).filter(Boolean).length,
     gesture: gestureName(up, pinching),
   };
-}
-
-// ---------- forces ----------
-
-function buildForces(hands) {
-  const W = fieldCanvas.width;
-  const H = fieldCanvas.height;
-  const forces = [];
-
-  for (const h of hands) {
-    const { lm, up, count, pinching, side } = h;
-    let cx = 0;
-    let cy = 0;
-    for (const i of PALM) {
-      cx += lm[i].x;
-      cy += lm[i].y;
-    }
-    cx = (cx / PALM.length) * W;
-    cy = (cy / PALM.length) * H;
-    const size = Math.hypot((lm[0].x - lm[9].x) * W, (lm[0].y - lm[9].y) * H);
-
-    // Landmark z is measured from the wrist, so it says nothing about how far
-    // the hand is from the camera. On-screen hand size does: bigger = closer.
-    const cz = Math.max(-180, Math.min(420, 420 - ((size - 60) / 160) * 600));
-
-    if (count === 0) wasFist[side] = true;
-    else if (wasFist[side] && count >= 4) {
-      wasFist[side] = false;
-      field.shockwave(cx, cy, cz);
-    }
-
-    if (pinching) {
-      forces.push({
-        x: ((lm[4].x + lm[8].x) / 2) * W,
-        y: ((lm[4].y + lm[8].y) / 2) * H,
-        z: cz,
-        r: size * 5,
-        strength: -7,
-        swirl: 0.55,
-      });
-      continue;
-    }
-
-    const openness = count / 5;
-    forces.push({
-      x: cx,
-      y: cy,
-      z: cz,
-      r: size * (2.2 + openness * 2),
-      strength: 1.6 + openness * 2.6,
-      swirl: 0,
-    });
-
-    for (const [name, idx] of Object.entries(FINGERS)) {
-      if (!up[name]) continue;
-      const tip = lm[idx[3]];
-      forces.push({
-        x: tip.x * W,
-        y: tip.y * H,
-        z: cz,
-        r: size * 1.2,
-        strength: 1.4,
-        swirl: 0,
-      });
-    }
-  }
-  return forces;
 }
 
 // ---------- rendering ----------
@@ -223,10 +150,7 @@ function loop() {
     frames++;
   }
 
-  if (mode === "field") {
-    field.update(buildForces(hands));
-    field.render(fieldCtx);
-  } else if (mode === "filter") {
+  if (mode === "filter") {
     frame.update(hands, fxCanvas.width, fxCanvas.height);
     frame.render(fxCtx, video, fxCanvas.width, fxCanvas.height);
     const f = frame.filter;
@@ -255,11 +179,9 @@ function setMode(next) {
   for (const b of document.querySelectorAll(".modes button")) {
     b.classList.toggle("on", b.dataset.mode === next);
   }
-  fieldCtx.clearRect(0, 0, fieldCanvas.width, fieldCanvas.height);
   fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
   labelEl.textContent = "";
   frame.clear();
-  if (next === "field") field.reset();
 }
 
 async function startCamera() {
@@ -272,11 +194,10 @@ async function startCamera() {
     });
     video.srcObject = stream;
     await video.play();
-    for (const c of [canvas, fieldCanvas, fxCanvas]) {
+    for (const c of [canvas, fxCanvas]) {
       c.width = video.videoWidth;
       c.height = video.videoHeight;
     }
-    field = new Field(fieldCanvas.width, fieldCanvas.height);
     statusEl.textContent = "";
     loop();
   } catch (err) {
@@ -308,7 +229,6 @@ for (const b of document.querySelectorAll(".modes button")) {
 addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
-    field?.reset();
     frame.clear();
     fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
     labelEl.textContent = "";

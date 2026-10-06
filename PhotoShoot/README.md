@@ -3,8 +3,8 @@
 # PhotoShoot
 
 **Real-time hand tracking in the browser — no install, no backend.**
-Started as a finger-counting demo, grew into a hand-reactive 3D particle
-field and a two-hand gesture that stacks live video filters.
+Started as a finger-counting demo, grew into a two-hand gesture that
+stacks live video filters over the feed.
 
 [![MediaPipe](https://img.shields.io/badge/vision-MediaPipe%20Hand%20Landmarker-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)
 [![Canvas 2D](https://img.shields.io/badge/render-Canvas%202D-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](#)
@@ -23,18 +23,10 @@ is plain canvas/JS.
 
 ## What it does
 
-<table>
-<tr>
-<td width="50%">
-<img src="docs/field-3d.jpg" width="100%" alt="3D particle field">
-<sub><b>3D particle field</b> — perspective, depth-of-field, hand-driven forces</sub>
-</td>
-<td width="50%">
-<img src="docs/filter-stack.jpg" width="100%" alt="Stacked filter frames with live hand tracking">
-<sub><b>Filter frame</b> — 7 stacked regions, live hand skeleton overlay, 30fps</sub>
-</td>
-</tr>
-</table>
+<div align="center">
+<img src="docs/filter-stack.jpg" width="640" alt="Stacked filter frames with live hand tracking">
+<br><sub>Filter frame — 7 stacked regions, live hand skeleton overlay, 30fps</sub>
+</div>
 
 <div align="center">
 <img src="docs/filter-grid.jpg" width="640" alt="All eight filters">
@@ -46,16 +38,6 @@ is plain canvas/JS.
 recognizes a handful of static gestures (fist, open palm, peace, pointing,
 thumbs up, pinch, OK, rock, call-me). Finger state is computed from landmark
 distances rather than fixed angles, so it holds up across hand rotation.
-
-### 3D particle field
-[`field.js`](field.js) — 3,000 particles in a real depth volume, projected
-with perspective. Depth comes from on-screen hand size (landmark z is
-measured from the wrist, not the camera, so it's useless for this).
-Particles defocus into soft bokeh the further they sit from the focal
-plane, and hue shifts from warm to cool with distance — the two cues that
-make a point cloud read as a volume instead of a flat sprite sheet. Open
-palm repels, pinch creates a swirling vortex, closing then opening a fist
-fires an expanding shockwave.
 
 ### Filter frame
 [`filters.js`](filters.js) — hold an L-shape with both hands (thumb + index

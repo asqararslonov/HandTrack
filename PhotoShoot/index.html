@@ -36,7 +36,6 @@
   <main class="app">
     <section class="stage">
       <video id="video" playsinline muted></video>
-      <canvas id="field"></canvas>
       <canvas id="fx"></canvas>
       <canvas id="overlay"></canvas>
       <div id="status" class="status">Loading hand model…</div>
@@ -44,8 +43,7 @@
       <div class="fps"><span id="fps">0</span> fps</div>
       <div id="label" class="label"></div>
       <div class="modes">
-        <button data-mode="field" class="on">Force field</button>
-        <button data-mode="filter">Filter frame</button>
+        <button data-mode="filter" class="on">Filter frame</button>
         <button data-mode="inspect">Inspect</button>
       </div>
     </section>
@@ -55,13 +53,6 @@
       <div id="hands" class="hands">
         <p class="empty">Show your hand to the camera.</p>
       </div>
-
-      <h1 class="spaced">Force field</h1>
-      <ul class="legend">
-        <li><b>🖐 Open palm</b> pushes particles away</li>
-        <li><b>🤏 Pinch</b> pulls them into a vortex</li>
-        <li><b>✊ → 🖐</b> fires a shockwave</li>
-      </ul>
 
       <h1 class="spaced">Filter frame</h1>
       <ul class="legend">
