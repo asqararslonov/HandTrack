@@ -10,19 +10,110 @@ const RELEASE_FRAMES = 6;
 const FULLSCREEN_AT = 0.82; // fraction of each axis that snaps to full frame
 const LERP = 0.35;
 const MAX_STAMPS = 12; // oldest drops off beyond this, to bound per-frame cost
+const PIXEL_PASS_W = 140; // width a CPU-fallback filter is computed at
 
-// Every filter is a GPU canvas filter. Posterize and Thermal reference SVG
-// filters defined in index.html; Pixelate is a downscale-and-upscale.
+// --- manual pixel equivalents, used only as a fallback (see below) ---
+
+function grayscalePixels(d) {
+  for (let i = 0; i < d.length; i += 4) {
+    const l = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    d[i] = d[i + 1] = d[i + 2] = l;
+  }
+}
+function sepiaPixels(d) {
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    d[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
+    d[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
+    d[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+  }
+}
+function invertPixels(d) {
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = 255 - d[i];
+    d[i + 1] = 255 - d[i + 1];
+    d[i + 2] = 255 - d[i + 2];
+  }
+}
+function nightVisionPixels(d) {
+  for (let i = 0; i < d.length; i += 4) {
+    const l = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    const c = Math.min(255, Math.max(0, (l - 100) * 1.6 + 100));
+    d[i] = c * 0.1;
+    d[i + 1] = c;
+    d[i + 2] = c * 0.25;
+  }
+}
+function posterizePixels(d) {
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = (d[i] >> 6) * 85;
+    d[i + 1] = (d[i + 1] >> 6) * 85;
+    d[i + 2] = (d[i + 2] >> 6) * 85;
+  }
+}
+function thermalPixels(d) {
+  for (let i = 0; i < d.length; i += 4) {
+    const v = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
+    d[i] = Math.min(255, v * 520 - 40);
+    d[i + 1] = Math.min(255, Math.max(0, v * 430 - 180));
+    d[i + 2] = Math.min(255, Math.max(0, 255 * Math.sin(v * Math.PI)));
+  }
+}
+
+// Every filter prefers a native GPU `ctx.filter` string — Posterize and
+// Thermal reference SVG filters defined in index.html, the rest are plain
+// CSS filter functions. `pixels` is a manual fallback used only on browsers
+// that don't actually apply the native one (see detectSupport below) —
+// older/some current Safari versions support `blur()` on Canvas2D but
+// silently no-op on grayscale/sepia/invert/hue-rotate and on url(#svg)
+// references, so `ctx.filter` can report success while drawing nothing.
 export const FILTERS = [
-  { name: "Grayscale", css: "grayscale(1)" },
-  { name: "Sepia", css: "sepia(0.9) contrast(1.1)" },
-  { name: "Invert", css: "invert(1)" },
-  { name: "Night vision", css: "grayscale(1) sepia(1) hue-rotate(55deg) saturate(5) contrast(1.4)" },
-  { name: "Posterize", css: "url(#f-posterize)" },
-  { name: "Thermal", css: "url(#f-thermal)" },
+  { name: "Grayscale", css: "grayscale(1)", pixels: grayscalePixels },
+  { name: "Sepia", css: "sepia(0.9) contrast(1.1)", pixels: sepiaPixels },
+  { name: "Invert", css: "invert(1)", pixels: invertPixels },
+  { name: "Night vision", css: "grayscale(1) sepia(1) hue-rotate(55deg) saturate(5) contrast(1.4)", pixels: nightVisionPixels },
+  { name: "Posterize", css: "url(#f-posterize)", pixels: posterizePixels, url: true },
+  { name: "Thermal", css: "url(#f-thermal)", pixels: thermalPixels, url: true },
   { name: "Pixelate", blocky: true },
   { name: "Dream", css: "blur(3px) saturate(1.8) brightness(1.15)" },
 ];
+
+// Draws a known color through `filter` and checks the result actually
+// changed — some Safari versions apply `ctx.filter = 'invert(1)'` (or a
+// url() reference) without error yet draw the source unmodified.
+function probe(fillHex, filterStr, expect) {
+  try {
+    const src = document.createElement("canvas");
+    src.width = src.height = 2;
+    const sctx = src.getContext("2d");
+    sctx.fillStyle = fillHex;
+    sctx.fillRect(0, 0, 2, 2);
+
+    const dst = document.createElement("canvas");
+    dst.width = dst.height = 2;
+    const dctx = dst.getContext("2d");
+    dctx.filter = filterStr;
+    dctx.drawImage(src, 0, 0);
+    const [r, g, b] = dctx.getImageData(0, 0, 1, 1).data;
+    return expect(r, g, b);
+  } catch {
+    return false;
+  }
+}
+
+let support = null;
+// Run once, lazily, after the real SVG defs exist in the DOM.
+function detectSupport() {
+  if (support) return support;
+  support = {
+    color: probe("#ff0000", "invert(1)", (r, g, b) => r < 80 && g > 150 && b > 150),
+    // Deliberately not pure red: posterize's discrete steps happen to map
+    // 255 back to 255, so a pure-channel probe color can't tell "the filter
+    // ran and snapped to the nearest step" apart from "the filter never ran."
+    url: probe("#64a0c8", "url(#f-posterize)", (r) => Math.abs(r - 0x64) > 20),
+  };
+  return support;
+}
 
 // An "L": index extended, middle curled. Ring/pinky aren't checked — on a
 // real hand they rarely curl all the way when you're making this shape, and
@@ -139,6 +230,9 @@ export class FilterFrame {
     const h = Math.min(H - y, Math.round(r.h));
     if (w < 8 || h < 8) return;
 
+    const sup = detectSupport();
+    const nativeOk = f.url ? sup.url : sup.color;
+
     if (f.blocky) {
       const sw = Math.max(1, Math.round(w / 22));
       const sh = Math.max(1, Math.round(h / 22));
@@ -146,6 +240,18 @@ export class FilterFrame {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(this.scratch, 0, 0, sw, sh, x, y, w, h);
       ctx.imageSmoothingEnabled = true;
+    } else if (f.pixels && !nativeOk) {
+      // CPU fallback: compute on a downscaled copy (full-res round-trips
+      // are what made the old per-pixel path slow, not the pixel math) and
+      // scale back up.
+      const k = Math.min(1, PIXEL_PASS_W / w, PIXEL_PASS_W / h);
+      const sw = Math.max(1, Math.round(w * k));
+      const sh = Math.max(1, Math.round(h * k));
+      this.scratchCtx.drawImage(video, x, y, w, h, 0, 0, sw, sh);
+      const img = this.scratchCtx.getImageData(0, 0, sw, sh);
+      f.pixels(img.data);
+      this.scratchCtx.putImageData(img, 0, 0);
+      ctx.drawImage(this.scratch, 0, 0, sw, sh, x, y, w, h);
     } else {
       ctx.filter = f.css;
       ctx.drawImage(video, x, y, w, h, x, y, w, h);

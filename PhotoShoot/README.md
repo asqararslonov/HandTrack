@@ -86,6 +86,33 @@ once per filter per frame — needed for the pixelate effect — reallocates the
 backing store and alone cost ~30ms across 12 stamps. Allocating it once at
 startup instead of per-call fixed it.
 
+**Live on Vercel, but only one filter visibly worked.** All 7 non-blur
+filters silently did nothing after deploying — Canvas2D `ctx.filter` can
+accept `grayscale()`, `sepia()`, `invert()`, `hue-rotate()`, and
+`url(#svg-filter)` without erroring, yet some Safari versions never
+actually apply them, while `blur()` has been reliably supported for far
+longer. The bug reads as "it's live but broken" when it's really "half the
+filter functions Canvas2D accepts are silently no-ops on this browser" —
+nothing in the deployed source was different from what worked locally.
+
+Fixed with a runtime capability probe: draw one pixel through the filter,
+check whether the color actually changed, and fall back to the manual
+per-channel math this project used before the GPU rewrite — downscaled to
+140px wide first, since the earlier perf bug was never really about the
+pixel math, it was about `getImageData` call count. Verified by monkey-
+patching `ctx.filter` into a silent no-op (the exact failure being
+hypothesized) and confirming all 6 affected filters still visibly changed
+the image: **2.95ms for 12 stacked regions**, inside budget even on the
+slower code path.
+
+First attempt at the probe had its own bug worth noting: it tested
+Posterize with pure red, but posterize's discrete steps happen to map 255
+back to 255 — so "the filter ran and snapped to the nearest step" and "the
+filter never ran" looked identical, and the probe reported native support
+as broken even in a browser (Chromium) where it demonstrably isn't. Fixed
+by probing with a color that isn't already sitting on a quantization
+boundary.
+
 ## Known gaps
 
 - Gesture thresholds are hand-tuned heuristics, not learned — works, but is
