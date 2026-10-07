@@ -3,7 +3,7 @@ import {
   FilesetResolver,
   DrawingUtils,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { FilterFrame } from "./filters.js";
+import { FilterFrame, isCorner } from "./filters.js";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL =
@@ -105,6 +105,25 @@ function drawHand(lm, dim) {
   }
 }
 
+// Live readout of whether each hand currently passes the filter-frame
+// gesture check — lets you see which hand/finger is off instead of guessing.
+function drawCornerBadge(h, W, H) {
+  const ok = isCorner(h);
+  const wrist = h.lm[0];
+  const x = wrist.x * W;
+  const y = wrist.y * H + 28;
+  ctx.save();
+  // The canvas element is CSS-mirrored for the selfie view; flip the text
+  // back around its own position so it still reads left-to-right.
+  ctx.translate(x, y);
+  ctx.scale(-1, 1);
+  ctx.font = "600 13px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillStyle = ok ? "#4ade80" : "#f87171";
+  ctx.fillText(ok ? "L ✓" : "L ✗", 0, 0);
+  ctx.restore();
+}
+
 function renderPanel(hands) {
   if (!hands.length) {
     if (!handsEl.querySelector(".empty")) {
@@ -163,6 +182,9 @@ function loop() {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (const h of hands) drawHand(h.lm, mode !== "inspect");
+  if (mode === "filter") {
+    for (const h of hands) drawCornerBadge(h, canvas.width, canvas.height);
+  }
 
   if (now - fpsT0 >= 1000) {
     fpsEl.textContent = frames;

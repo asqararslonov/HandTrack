@@ -24,10 +24,14 @@ export const FILTERS = [
   { name: "Dream", css: "blur(3px) saturate(1.8) brightness(1.15)" },
 ];
 
-// An "L": index extended, the three small fingers curled.
-function isCorner(h) {
-  const { index, middle, ring, pinky } = h.up;
-  return index && !middle && !ring && !pinky;
+// An "L": index extended, middle curled. Ring/pinky aren't checked — on a
+// real hand they rarely curl all the way when you're making this shape, and
+// they're also the fingers MediaPipe misreads most (most self-occluded), so
+// requiring all three down made the gesture far stricter than intended and
+// it would basically never fire in practice.
+export function isCorner(h) {
+  const { index, middle } = h.up;
+  return index && !middle;
 }
 
 export class FilterFrame {

@@ -40,13 +40,28 @@ thumbs up, pinch, OK, rock, call-me). Finger state is computed from landmark
 distances rather than fixed angles, so it holds up across hand rotation.
 
 ### Filter frame
-[`filters.js`](filters.js) — hold an L-shape with both hands (thumb + index
-out) and the rectangle between them gets a live filter. Drop your hands and
-it stays in place; frame again and a new rectangle stacks on top with the
-next filter in the cycle, so the frame fills up with regions instead of
-replacing the last one.
+[`filters.js`](filters.js) — hold an L-shape with both hands (index out,
+middle curled) and the rectangle between them gets a live filter. Drop your
+hands and it stays in place; frame again and a new rectangle stacks on top
+with the next filter in the cycle, so the frame fills up with regions
+instead of replacing the last one. In Filter Frame mode each tracked hand
+gets a small **L ✓ / L ✗** readout at the wrist, so you can see which hand
+the gesture check disagrees with instead of guessing.
 
-## The interesting bug
+## The interesting bugs
+
+**Deployed, but the gesture never fired.** The first version of the
+gesture check required index up *and* middle, ring, *and* pinky all fully
+curled, on both hands, at once. That's much stricter than it sounds: ring
+and pinky rarely curl all the way during a natural "L," and they're also
+the two fingers MediaPipe reads least reliably (most self-occluded). Hand
+tracking itself worked fine — the compound condition just almost never
+passed. Fixed by dropping to the two signals that actually matter: index
+up, middle down. Ring/pinky aren't checked at all anymore. The live L ✓/✗
+badge exists specifically so this class of "tracking works, gesture
+doesn't" bug is visible on-screen instead of invisible.
+
+**The 12-stamp performance bug.**
 
 Stacking filter regions meant running up to 12 of them per frame. Grayscale
 and the other native `ctx.filter` strings cost nothing, but Posterize and
