@@ -97,21 +97,35 @@ nothing in the deployed source was different from what worked locally.
 
 Fixed with a runtime capability probe: draw one pixel through the filter,
 check whether the color actually changed, and fall back to the manual
-per-channel math this project used before the GPU rewrite — downscaled to
-140px wide first, since the earlier perf bug was never really about the
-pixel math, it was about `getImageData` call count. Verified by monkey-
-patching `ctx.filter` into a silent no-op (the exact failure being
+per-channel math this project used before the GPU rewrite. Verified by
+monkey-patching `ctx.filter` into a silent no-op (the exact failure being
 hypothesized) and confirming all 6 affected filters still visibly changed
-the image: **2.95ms for 12 stacked regions**, inside budget even on the
-slower code path.
+the image.
 
-First attempt at the probe had its own bug worth noting: it tested
-Posterize with pure red, but posterize's discrete steps happen to map 255
-back to 255 — so "the filter ran and snapped to the nearest step" and "the
-filter never ran" looked identical, and the probe reported native support
-as broken even in a browser (Chromium) where it demonstrably isn't. Fixed
-by probing with a color that isn't already sitting on a quantization
-boundary.
+First attempt at the probe had two bugs worth noting, both found before
+shipping by actually testing the fix rather than trusting the design:
+
+- It tested every filter with one representative string (`invert(1)`)
+  standing in for all of them. A browser can support a simple function
+  while failing a long compound chain like Night Vision's, or the reverse —
+  so each filter's own exact string needs its own probe, not a proxy.
+- It tested Posterize with pure red, but posterize's discrete steps happen
+  to map 255 back to 255 — so "the filter ran and snapped to the nearest
+  step" and "the filter never ran" looked identical, and the probe reported
+  native support as broken even in Chromium, where it demonstrably isn't.
+  Fixed by probing with a color that isn't sitting on a quantization
+  boundary, shared across every filter's probe.
+
+The first shipped fallback also over-corrected on quality: it rendered at
+a 140px-wide working resolution to stay fast, which was comfortably within
+budget (2.95ms for 12 stacked regions) but visibly softer than the native
+path — exactly the kind of regression that's easy to miss when you're
+focused on "does it work at all" rather than "does it still look good."
+Raised to 240px after re-measuring the worst case (12 simultaneous
+fallback regions) at each step: 320px hit 13.2ms, too close to the 16.7ms
+budget once real hand-tracking cost is added back in; 240px landed at
+4.76ms with clearly smoother gradients, a safer margin on exactly the
+slower devices that need this path at all.
 
 ## Known gaps
 

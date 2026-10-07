@@ -10,7 +10,7 @@ const RELEASE_FRAMES = 6;
 const FULLSCREEN_AT = 0.82; // fraction of each axis that snaps to full frame
 const LERP = 0.35;
 const MAX_STAMPS = 12; // oldest drops off beyond this, to bound per-frame cost
-const PIXEL_PASS_W = 140; // width a CPU-fallback filter is computed at
+const PIXEL_PASS_W = 240; // width a CPU-fallback filter is computed at
 
 // --- manual pixel equivalents, used only as a fallback (see below) ---
 
@@ -72,22 +72,31 @@ export const FILTERS = [
   { name: "Sepia", css: "sepia(0.9) contrast(1.1)", pixels: sepiaPixels },
   { name: "Invert", css: "invert(1)", pixels: invertPixels },
   { name: "Night vision", css: "grayscale(1) sepia(1) hue-rotate(55deg) saturate(5) contrast(1.4)", pixels: nightVisionPixels },
-  { name: "Posterize", css: "url(#f-posterize)", pixels: posterizePixels, url: true },
-  { name: "Thermal", css: "url(#f-thermal)", pixels: thermalPixels, url: true },
+  { name: "Posterize", css: "url(#f-posterize)", pixels: posterizePixels },
+  { name: "Thermal", css: "url(#f-thermal)", pixels: thermalPixels },
   { name: "Pixelate", blocky: true },
   { name: "Dream", css: "blur(3px) saturate(1.8) brightness(1.15)" },
 ];
 
-// Draws a known color through `filter` and checks the result actually
-// changed — some Safari versions apply `ctx.filter = 'invert(1)'` (or a
-// url() reference) without error yet draw the source unmodified.
-function probe(fillHex, filterStr, expect) {
+// Draws a known, non-boundary test color through a filter string and checks
+// the result actually moved — some Safari versions accept `ctx.filter`
+// (plain CSS functions or a url() reference) without erroring, yet never
+// apply it, drawing the source unmodified. Tested per exact string (not one
+// representative filter standing in for all of them) because a browser can
+// support a simple function like invert() while silently failing on a long
+// compound chain like Night Vision's, or vice versa.
+const PROBE_COLOR = [100, 150, 200]; // arbitrary, and not a fixed point of
+// any filter in FILTERS — grayscale/sepia/invert/the SVG ramps all move it.
+const supportCache = new Map();
+
+function filterActuallyApplies(filterStr) {
+  if (supportCache.has(filterStr)) return supportCache.get(filterStr);
+  let ok = false;
   try {
     const src = document.createElement("canvas");
     src.width = src.height = 2;
-    const sctx = src.getContext("2d");
-    sctx.fillStyle = fillHex;
-    sctx.fillRect(0, 0, 2, 2);
+    src.getContext("2d").fillStyle = `rgb(${PROBE_COLOR.join(",")})`;
+    src.getContext("2d").fillRect(0, 0, 2, 2);
 
     const dst = document.createElement("canvas");
     dst.width = dst.height = 2;
@@ -95,24 +104,13 @@ function probe(fillHex, filterStr, expect) {
     dctx.filter = filterStr;
     dctx.drawImage(src, 0, 0);
     const [r, g, b] = dctx.getImageData(0, 0, 1, 1).data;
-    return expect(r, g, b);
+    const moved = Math.abs(r - PROBE_COLOR[0]) + Math.abs(g - PROBE_COLOR[1]) + Math.abs(b - PROBE_COLOR[2]);
+    ok = moved > 15;
   } catch {
-    return false;
+    ok = false;
   }
-}
-
-let support = null;
-// Run once, lazily, after the real SVG defs exist in the DOM.
-function detectSupport() {
-  if (support) return support;
-  support = {
-    color: probe("#ff0000", "invert(1)", (r, g, b) => r < 80 && g > 150 && b > 150),
-    // Deliberately not pure red: posterize's discrete steps happen to map
-    // 255 back to 255, so a pure-channel probe color can't tell "the filter
-    // ran and snapped to the nearest step" apart from "the filter never ran."
-    url: probe("#64a0c8", "url(#f-posterize)", (r) => Math.abs(r - 0x64) > 20),
-  };
-  return support;
+  supportCache.set(filterStr, ok);
+  return ok;
 }
 
 // An "L": index extended, middle curled. Ring/pinky aren't checked — on a
@@ -138,8 +136,8 @@ export class FilterFrame {
     // One scratch buffer, sized once. Assigning canvas.width reallocates the
     // backing store and costs milliseconds, so it must not happen per frame.
     this.scratch = document.createElement("canvas");
-    this.scratch.width = 256;
-    this.scratch.height = 256;
+    this.scratch.width = 384;
+    this.scratch.height = 384;
     this.scratchCtx = this.scratch.getContext("2d");
   }
 
@@ -230,8 +228,7 @@ export class FilterFrame {
     const h = Math.min(H - y, Math.round(r.h));
     if (w < 8 || h < 8) return;
 
-    const sup = detectSupport();
-    const nativeOk = f.url ? sup.url : sup.color;
+    const nativeOk = f.css ? filterActuallyApplies(f.css) : false;
 
     if (f.blocky) {
       const sw = Math.max(1, Math.round(w / 22));
