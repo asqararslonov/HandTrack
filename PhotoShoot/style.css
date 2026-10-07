@@ -119,9 +119,25 @@ body {
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
+  width: calc(100% - 24px);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
 }
+
+/* Visually separates the view-mode buttons from the frame actions (Undo /
+   Clear — the touch equivalent of the Z / Space keyboard shortcuts; a
+   phone has no keyboard, so without these, frames could be stacked but
+   never removed). flex-wrap on .modes means this just drops to its own
+   line on narrow screens instead of overlapping anything. */
+.modes .sep {
+  width: 1px;
+  align-self: stretch;
+  background: #ffffff22;
+  margin: 2px 2px;
+}
+
 .modes button {
   padding: 7px 14px;
   border: 1px solid #ffffff22;
@@ -197,4 +213,10 @@ body {
 
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; }
+  /* The controls row can wrap to two lines on a narrow phone; the fixed
+     16:9 aspect-ratio doesn't leave room for that without colliding with
+     the centered Start camera button underneath it (and since .modes
+     paints on top, a tap meant for Start camera could land on a mode
+     button instead). Taller aspect gives both rows breathing room. */
+  .stage { aspect-ratio: 3 / 4; }
 }

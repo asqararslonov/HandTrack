@@ -127,6 +127,47 @@ budget once real hand-tracking cost is added back in; 240px landed at
 4.76ms with clearly smoother gradients, a safer margin on exactly the
 slower devices that need this path at all.
 
+**Worked on a real phone, but stretching the frame wider didn't resize
+it.** The two-hand gesture tracked fine; the rectangle itself just
+wouldn't grow past a certain point when spreading hands apart to enlarge
+it. My first theory was wrong and worth recording as a reasoning check:
+the rectangle's corners are built from a min/max bound over each hand's
+thumb *and* index tip, and I initially suspected the thumb (no longer
+required to stay extended once the gesture check was relaxed) was
+anchoring the box inward. That doesn't hold up mathematically — a min/max
+bound over more points can only match or exceed the same bound over
+fewer, never shrink it, so dropping the thumb point couldn't be what was
+making the box *too small*. Caught this by proving it out numerically
+before shipping the wrong fix, not by assuming the first plausible story.
+
+The real cause: resizing was gated on the *exact* per-frame finger pose
+(index up, middle curled, both hands) that starts the gesture, not just
+on both hands being visible. Spreading your arms wider to enlarge the
+frame changes your hands' angle to the camera a lot — and that's exactly
+when the per-finger curl reading gets noisiest. A single misread frame
+mid-stretch froze the rectangle right where it was, which reads as
+"expanding doesn't work" even though tracking itself looked fine. Fixed
+by decoupling the two: starting the gesture still requires the strict
+pose, sustained for several frames, so it can't trigger by accident —
+but once started, resizing only needs both hands to still be visible,
+and finishing ("drop your hands," per the on-screen instruction) now
+means hands actually leaving the frame, not the pose merely lapsing for
+a moment. Verified with brief one-hand occlusion mid-resize too: it holds
+the rectangle steady and resumes without stamping prematurely.
+
+**Phone testing turned up two UI bugs with the same root cause: nothing
+had been tried on a touch screen before.** Undo (`Z`) and Clear (`Space`)
+are keyboard shortcuts with no on-screen equivalent — a phone user could
+stack filters but never remove or clear them without reloading the page.
+Added matching touch buttons. Second: once those buttons existed, the
+control row could wrap to two lines on a narrow phone, and the fixed
+16:9 stage was short enough that the wrapped row visually collided with
+the centered "Start camera" button — worse, since the controls paint on
+top of it in the DOM, a tap aimed at "Start camera" could land on
+"Inspect" instead. Fixed by giving the stage more vertical room (a taller
+aspect ratio) below 760px, so both rows have space regardless of how the
+controls wrap.
+
 ## Known gaps
 
 - Gesture thresholds are hand-tuned heuristics, not learned — works, but is

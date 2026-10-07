@@ -20,6 +20,8 @@ const startBtn = document.getElementById("start");
 const fpsEl = document.getElementById("fps");
 const handsEl = document.getElementById("hands");
 const cardTpl = document.getElementById("hand-card");
+const undoBtn = document.getElementById("undo");
+const clearBtn = document.getElementById("clear");
 const draw = new DrawingUtils(ctx);
 
 // Landmark indices: https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker
@@ -196,14 +198,18 @@ function loop() {
 
 // ---------- setup ----------
 
+function clearFrames() {
+  frame.clear();
+  fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  labelEl.textContent = "";
+}
+
 function setMode(next) {
   mode = next;
   for (const b of document.querySelectorAll(".modes button")) {
     b.classList.toggle("on", b.dataset.mode === next);
   }
-  fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
-  labelEl.textContent = "";
-  frame.clear();
+  clearFrames();
 }
 
 async function startCamera() {
@@ -248,12 +254,12 @@ startBtn.addEventListener("click", startCamera);
 for (const b of document.querySelectorAll(".modes button")) {
   b.addEventListener("click", () => setMode(b.dataset.mode));
 }
+undoBtn.addEventListener("click", () => frame.undo());
+clearBtn.addEventListener("click", clearFrames);
 addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
-    frame.clear();
-    fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
-    labelEl.textContent = "";
+    clearFrames();
   }
   if (e.key === "z") frame.undo();
 });

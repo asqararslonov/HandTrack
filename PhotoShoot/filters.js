@@ -157,12 +157,13 @@ export class FilterFrame {
     this.stamps.pop();
   }
 
-  // Bounding box of both hands' thumb and index tips.
+  // Bounding box of both hands' thumb and index tips. (A min/max bound
+  // over more points can only match or exceed one over fewer points, so
+  // including the thumb tip here can't be what makes the frame undersize
+  // when you spread your hands — see update() for the actual fix.)
   cornersOf(hands, W, H) {
     const pts = [];
-    for (const h of hands) {
-      pts.push(h.lm[4], h.lm[8]);
-    }
+    for (const h of hands) pts.push(h.lm[4], h.lm[8]);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const p of pts) {
       x0 = Math.min(x0, p.x);
@@ -175,6 +176,7 @@ export class FilterFrame {
 
   update(hands, W, H) {
     const framing = hands.length === 2 && hands.every(isCorner);
+    const twoHands = hands.length === 2;
 
     if (framing) {
       this.release = 0;
@@ -186,7 +188,15 @@ export class FilterFrame {
       }
     } else {
       this.engage = 0;
-      if (this.held) {
+    }
+
+    if (this.held) {
+      if (twoHands) {
+        this.release = 0;
+      } else {
+        // Releasing is "drop your hands" (they leave the frame), not "your
+        // exact finger pose lapsed for a frame" — see the note below on why
+        // that distinction is the actual fix here.
         this.release++;
         if (this.release >= RELEASE_FRAMES) {
           this.held = false;
@@ -200,7 +210,15 @@ export class FilterFrame {
       }
     }
 
-    if (this.held && framing) {
+    if (this.held && twoHands) {
+      // Deliberately keyed on "both hands visible," not the stricter
+      // `framing` (exact index/middle pose) used to start the gesture.
+      // Spreading your hands wider to enlarge the frame changes their
+      // angle to the camera a lot, which is exactly when the per-finger
+      // curl reading gets noisiest — gating the resize on the strict pose
+      // meant a single misread frame mid-stretch froze the rectangle right
+      // there, which read as "expanding doesn't work." Once the gesture
+      // has started, resizing only needs to know where your hands are.
       const r = this.cornersOf(hands, W, H);
       this.full = r.w > W * FULLSCREEN_AT && r.h > H * FULLSCREEN_AT;
       this.target = this.full ? { x: 0, y: 0, w: W, h: H } : r;
@@ -209,8 +227,6 @@ export class FilterFrame {
         this.rect[k] += (this.target[k] - this.rect[k]) * LERP;
       }
     }
-    // Held-but-not-framing is the release countdown: leave the rectangle alone
-    // so it lands where it was framed, not where the hands trailed off to.
   }
 
   render(ctx, video, W, H) {
