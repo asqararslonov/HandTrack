@@ -113,6 +113,7 @@ body {
 }
 .label:empty { opacity: 0; }
 .label.frozen { color: #fbbf24; }
+.label.shot { color: #f87171; }
 
 .modes {
   position: absolute;

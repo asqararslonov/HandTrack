@@ -123,6 +123,18 @@ export function isCorner(h) {
   return index && !middle;
 }
 
+// A one-hand "finger gun" — index out, everything else curled, including
+// the thumb cocked up like a hammer. Unlike isCorner this deliberately
+// checks all five fingers: it only ever runs with exactly one hand in
+// frame (see update()), so there's no risk of it fighting the two-hand
+// framing gesture, and tightening it here makes the dismiss gesture read
+// as a deliberate, distinct shape instead of firing off whatever pose your
+// hand happens to be in while approaching the two-hand gesture.
+export function isGunHand(h) {
+  const { index, middle, ring, pinky } = h.up;
+  return index && !middle && !ring && !pinky;
+}
+
 export class FilterFrame {
   constructor() {
     this.idx = -1;
@@ -133,6 +145,8 @@ export class FilterFrame {
     this.engage = 0;
     this.release = 0;
     this.full = false;
+    this.armed = { Left: false, Right: false }; // thumb-up seen while gun-posed
+    this.shotAt = 0; // performance.now() of the last dismiss, for UI feedback
     // One scratch buffer, sized once. Assigning canvas.width reallocates the
     // backing store and costs milliseconds, so it must not happen per frame.
     this.scratch = document.createElement("canvas");
@@ -151,10 +165,13 @@ export class FilterFrame {
     this.stamps.length = 0;
     this.held = false;
     this.idx = -1;
+    this.armed.Left = this.armed.Right = false;
   }
 
   undo() {
+    if (!this.stamps.length) return;
     this.stamps.pop();
+    this.shotAt = performance.now();
   }
 
   // Bounding box of both hands' thumb and index tips. (A min/max bound
@@ -226,6 +243,20 @@ export class FilterFrame {
       for (const k of ["x", "y", "w", "h"]) {
         this.rect[k] += (this.target[k] - this.rect[k]) * LERP;
       }
+    }
+
+    // Dismiss gesture: point a finger gun with ONE hand, thumb cocked up,
+    // then drop the thumb like pulling the trigger — pops the last frame
+    // off, same as Undo. Only looks at this when exactly one hand is in
+    // frame, so it can never be confused with the two-hand framing above.
+    if (hands.length === 1) {
+      const h = hands[0];
+      const gun = isGunHand(h);
+      const wasArmed = this.armed[h.side];
+      if (gun && wasArmed && !h.up.thumb) this.undo(); // falling edge: thumb just dropped
+      this.armed[h.side] = gun ? h.up.thumb : false;
+    } else {
+      this.armed.Left = this.armed.Right = false;
     }
   }
 

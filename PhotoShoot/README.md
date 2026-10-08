@@ -45,8 +45,22 @@ middle curled) and the rectangle between them gets a live filter. Drop your
 hands and it stays in place; frame again and a new rectangle stacks on top
 with the next filter in the cycle, so the frame fills up with regions
 instead of replacing the last one. In Filter Frame mode each tracked hand
-gets a small **L ✓ / L ✗** readout at the wrist, so you can see which hand
-the gesture check disagrees with instead of guessing.
+gets a small readout at the wrist, so you can see what the gesture check
+disagrees with instead of guessing: **L ✓ / L ✗** with two hands, **🔫 /
+🔫 armed / 🔫 ✗** with one.
+
+### Dismiss gesture
+Point a one-hand "finger gun" (index out, everything else curled, thumb
+cocked up) at the screen and drop your thumb like pulling a trigger — it
+pops the last frame off, the same as the Undo button. Deliberately gated
+to exactly one hand in frame: with two hands present this logic doesn't
+run at all, so it can never be confused with the two-hand framing
+gesture above, even if one hand happens to be gun-shaped while the other
+is still framing. The trigger itself is an edge detector (thumb was up,
+now isn't), not a level check, so holding the fired pose doesn't repeat-
+fire, and simply having your thumb down as part of some other gesture
+(an open palm, say) doesn't count — only a thumb that was up while
+gun-posed and then drops.
 
 ## The interesting bugs
 

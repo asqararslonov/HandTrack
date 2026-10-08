@@ -3,7 +3,7 @@ import {
   FilesetResolver,
   DrawingUtils,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { FilterFrame, isCorner } from "./filters.js";
+import { FilterFrame, isCorner, isGunHand } from "./filters.js";
 
 const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL =
@@ -107,10 +107,13 @@ function drawHand(lm, dim) {
   }
 }
 
-// Live readout of whether each hand currently passes the filter-frame
-// gesture check — lets you see which hand/finger is off instead of guessing.
-function drawCornerBadge(h, W, H) {
-  const ok = isCorner(h);
+// Live readout of what the current hand(s) read as, gesture-wise — lets you
+// see what's off instead of guessing. Two hands: the L-shape framing check.
+// One hand: the dismiss "finger gun" check, since that's the only gesture a
+// lone hand can be attempting in this mode.
+function drawGestureBadge(h, twoHanded, W, H) {
+  const ok = twoHanded ? isCorner(h) : isGunHand(h);
+  const label = twoHanded ? (ok ? "L ✓" : "L ✗") : ok ? (h.up.thumb ? "🔫 armed" : "🔫") : "🔫 ✗";
   const wrist = h.lm[0];
   const x = wrist.x * W;
   const y = wrist.y * H + 28;
@@ -122,7 +125,7 @@ function drawCornerBadge(h, W, H) {
   ctx.font = "600 13px system-ui";
   ctx.textAlign = "center";
   ctx.fillStyle = ok ? "#4ade80" : "#f87171";
-  ctx.fillText(ok ? "L ✓" : "L ✗", 0, 0);
+  ctx.fillText(label, 0, 0);
   ctx.restore();
 }
 
@@ -174,18 +177,26 @@ function loop() {
   if (mode === "filter") {
     frame.update(hands, fxCanvas.width, fxCanvas.height);
     frame.render(fxCtx, video, fxCanvas.width, fxCanvas.height);
-    const f = frame.filter;
-    const n = frame.stamps.length;
-    labelEl.textContent = frame.rect && f
-      ? `${f.name}${frame.full ? " · full" : ""}${n ? ` · +${n}` : ""}`
-      : n ? `${n} frame${n > 1 ? "s" : ""}` : "";
-    labelEl.classList.toggle("frozen", !frame.rect && n > 0);
+    const sinceShot = now - frame.shotAt;
+    if (sinceShot < 600) {
+      labelEl.textContent = "💥 Removed";
+      labelEl.classList.add("shot");
+    } else {
+      const f = frame.filter;
+      const n = frame.stamps.length;
+      labelEl.textContent = frame.rect && f
+        ? `${f.name}${frame.full ? " · full" : ""}${n ? ` · +${n}` : ""}`
+        : n ? `${n} frame${n > 1 ? "s" : ""}` : "";
+      labelEl.classList.toggle("frozen", !frame.rect && n > 0);
+      labelEl.classList.remove("shot");
+    }
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   for (const h of hands) drawHand(h.lm, mode !== "inspect");
   if (mode === "filter") {
-    for (const h of hands) drawCornerBadge(h, canvas.width, canvas.height);
+    const twoHanded = hands.length === 2;
+    for (const h of hands) drawGestureBadge(h, twoHanded, canvas.width, canvas.height);
   }
 
   if (now - fpsT0 >= 1000) {
