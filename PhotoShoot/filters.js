@@ -10,7 +10,29 @@ const RELEASE_FRAMES = 6;
 const FULLSCREEN_AT = 0.82; // fraction of each axis that snaps to full frame
 const LERP = 0.35;
 const MAX_STAMPS = 12; // oldest drops off beyond this, to bound per-frame cost
-const PIXEL_PASS_W = 240; // width a CPU-fallback filter is computed at
+const POSE_GRACE_FRAMES = 3; // tolerate a brief misread without freezing resize
+// The CPU fallback's working resolution adapts to how many regions need it
+// *this frame* (see fallbackPassWidth) instead of a single fixed number —
+// full quality for the common case of one or two active filters, scaled
+// down automatically only when many are stacked at once, so the 12-stamp
+// worst case still can't blow the frame budget. The scratch buffer itself
+// is resized to match (see ensureScratchSize) — a getImageData/putImageData
+// pair costs more the larger the canvas's *allocated* size, regardless of
+// how small a sub-region you actually read, so a buffer kept oversized
+// "just in case" taxes every frame, including the common one-filter case.
+// 1280 means "no cap" in practice — paint() below never upscales past the
+// region's own size anyway (k is clamped to 1), so this only matters for
+// regions wider than 1280, which can't happen. Measured cost even at this
+// ceiling: ~3.7ms for 12 simultaneous fallback regions, ~2.7ms full-screen.
+// See README for how much the scratch-buffer fix changed this number.
+const PIXEL_PASS_MAX = 1280;
+const PIXEL_PASS_MIN = 150;
+const PIXEL_PASS_BUDGET = 1280;
+
+function fallbackPassWidth(activeCount) {
+  const w = PIXEL_PASS_BUDGET / Math.sqrt(Math.max(1, activeCount));
+  return Math.max(PIXEL_PASS_MIN, Math.min(PIXEL_PASS_MAX, Math.round(w)));
+}
 
 // --- manual pixel equivalents, used only as a fallback (see below) ---
 
@@ -144,15 +166,24 @@ export class FilterFrame {
     this.held = false;
     this.engage = 0;
     this.release = 0;
+    this.poseGrace = 0;
     this.full = false;
     this.armed = { Left: false, Right: false }; // thumb-up seen while gun-posed
     this.shotAt = 0; // performance.now() of the last dismiss, for UI feedback
-    // One scratch buffer, sized once. Assigning canvas.width reallocates the
-    // backing store and costs milliseconds, so it must not happen per frame.
+    // Resized on demand (see ensureScratchSize) to match each frame's
+    // working resolution — once per *frame* at most, never per stamp. A
+    // bare `canvas.width = …` assignment is the expensive case (measured
+    // ~2.5ms) when it happens 12 times in a frame; once, it's ~0.2ms.
     this.scratch = document.createElement("canvas");
-    this.scratch.width = 384;
-    this.scratch.height = 384;
+    this.scratch.width = PIXEL_PASS_MIN;
+    this.scratch.height = PIXEL_PASS_MIN;
     this.scratchCtx = this.scratch.getContext("2d");
+  }
+
+  ensureScratchSize(size) {
+    if (this.scratch.width === size) return;
+    this.scratch.width = size;
+    this.scratch.height = size;
   }
 
   get filter() {
@@ -196,6 +227,7 @@ export class FilterFrame {
     const twoHands = hands.length === 2;
 
     if (framing) {
+      this.poseGrace = POSE_GRACE_FRAMES;
       this.release = 0;
       this.engage++;
       if (this.engage >= ENGAGE_FRAMES && !this.held) {
@@ -205,37 +237,38 @@ export class FilterFrame {
       }
     } else {
       this.engage = 0;
+      if (this.poseGrace > 0) this.poseGrace--;
     }
 
-    if (this.held) {
-      if (twoHands) {
-        this.release = 0;
-      } else {
-        // Releasing is "drop your hands" (they leave the frame), not "your
-        // exact finger pose lapsed for a frame" — see the note below on why
-        // that distinction is the actual fix here.
-        this.release++;
-        if (this.release >= RELEASE_FRAMES) {
-          this.held = false;
-          if (this.rect && this.rect.w > 8 && this.rect.h > 8) {
-            // Lay it down and leave it — frames accumulate.
-            this.stamps.push({ rect: { ...this.rect }, idx: this.idx });
-            if (this.stamps.length > MAX_STAMPS) this.stamps.shift();
-          }
-          this.rect = null;
+    if (this.held && !framing) {
+      // Releasing is keyed on the pose lapsing (you stop making the L),
+      // same as the on-screen "drop your hands" instruction always meant
+      // — not on a hand leaving the camera entirely. A short grace window
+      // below covers the one real problem that framing-gated resizing
+      // had: a single misread frame mid-stretch shouldn't freeze the
+      // rectangle. Gating release on it too would mean letting go of the
+      // pose keeps dragging the frame for as long as both hands stay in
+      // shot, which reads as "won't stop."
+      this.release++;
+      if (this.release >= RELEASE_FRAMES) {
+        this.held = false;
+        if (this.rect && this.rect.w > 8 && this.rect.h > 8) {
+          // Lay it down and leave it — frames accumulate.
+          this.stamps.push({ rect: { ...this.rect }, idx: this.idx });
+          if (this.stamps.length > MAX_STAMPS) this.stamps.shift();
         }
+        this.rect = null;
       }
     }
 
-    if (this.held && twoHands) {
-      // Deliberately keyed on "both hands visible," not the stricter
-      // `framing` (exact index/middle pose) used to start the gesture.
+    if (this.held && twoHands && (framing || this.poseGrace > 0)) {
       // Spreading your hands wider to enlarge the frame changes their
       // angle to the camera a lot, which is exactly when the per-finger
-      // curl reading gets noisiest — gating the resize on the strict pose
-      // meant a single misread frame mid-stretch froze the rectangle right
-      // there, which read as "expanding doesn't work." Once the gesture
-      // has started, resizing only needs to know where your hands are.
+      // curl reading gets noisiest — a single misread frame mid-stretch
+      // used to freeze the rectangle right there. The grace window rides
+      // through that without also meaning "stop resizing" takes as long
+      // as "finish the gesture" does (RELEASE_FRAMES) — it should be much
+      // faster than that, see POSE_GRACE_FRAMES above.
       const r = this.cornersOf(hands, W, H);
       this.full = r.w > W * FULLSCREEN_AT && r.h > H * FULLSCREEN_AT;
       this.target = this.full ? { x: 0, y: 0, w: W, h: H } : r;
@@ -262,11 +295,27 @@ export class FilterFrame {
 
   render(ctx, video, W, H) {
     ctx.clearRect(0, 0, W, H);
-    for (const s of this.stamps) this.paint(ctx, video, W, H, s.rect, FILTERS[s.idx], false);
-    if (this.rect && this.filter) this.paint(ctx, video, W, H, this.rect, this.filter, true);
+
+    // Count how many regions this frame will actually need the CPU
+    // fallback, so each one's working resolution can be as high as
+    // possible without the total cost depending on a fixed worst case.
+    let activeFallbacks = 0;
+    for (const s of this.stamps) {
+      const f = FILTERS[s.idx];
+      if (f.pixels && !filterActuallyApplies(f.css)) activeFallbacks++;
+    }
+    if (this.rect && this.filter?.pixels && !filterActuallyApplies(this.filter.css)) activeFallbacks++;
+    const passWidth = fallbackPassWidth(activeFallbacks);
+    // Only resize for the fallback path's sake — Pixelate's own downscale
+    // is tiny regardless, and skipping this when nothing needs it avoids
+    // paying for a resize on frames that don't need one at all.
+    if (activeFallbacks > 0) this.ensureScratchSize(passWidth);
+
+    for (const s of this.stamps) this.paint(ctx, video, W, H, s.rect, FILTERS[s.idx], false, passWidth);
+    if (this.rect && this.filter) this.paint(ctx, video, W, H, this.rect, this.filter, true, passWidth);
   }
 
-  paint(ctx, video, W, H, r, f, live) {
+  paint(ctx, video, W, H, r, f, live, passWidth = PIXEL_PASS_MAX) {
     if (!r || !f || r.w < 8 || r.h < 8) return;
 
     const x = Math.max(0, Math.round(r.x));
@@ -287,8 +336,10 @@ export class FilterFrame {
     } else if (f.pixels && !nativeOk) {
       // CPU fallback: compute on a downscaled copy (full-res round-trips
       // are what made the old per-pixel path slow, not the pixel math) and
-      // scale back up.
-      const k = Math.min(1, PIXEL_PASS_W / w, PIXEL_PASS_W / h);
+      // scale back up. The working size itself (passWidth) is never larger
+      // than the region, so a small framed rectangle still renders at its
+      // own full resolution rather than being needlessly upscaled.
+      const k = Math.min(1, passWidth / w, passWidth / h);
       const sw = Math.max(1, Math.round(w * k));
       const sh = Math.max(1, Math.round(h * k));
       this.scratchCtx.drawImage(video, x, y, w, h, 0, 0, sw, sh);

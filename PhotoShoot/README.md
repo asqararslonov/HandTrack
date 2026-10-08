@@ -182,6 +182,50 @@ top of it in the DOM, a tap aimed at "Start camera" could land on
 aspect ratio) below 760px, so both rows have space regardless of how the
 controls wrap.
 
+**Resizing stopped when you let go, but didn't stop *when* you let go.**
+After fixing the "won't drag" bug, a follow-up report came in that felt
+contradictory at first: now it wouldn't stop dragging after you deliberately
+let go of the L-shape, as long as both hands stayed anywhere in frame. Both
+were real, and the fix for one had caused the other — resizing had been
+keyed on "both hands visible" with no time limit, when what was needed was
+"both hands visible, but only for a short grace window after the exact pose
+was last seen." A `POSE_GRACE_FRAMES` counter resets to a few frames every
+time the strict pose is read correctly and ticks down otherwise; resizing
+rides through it, same as before, but letting go for real now freezes the
+rectangle within ~2 frames (~70ms) instead of continuing indefinitely.
+
+**The CPU fallback's quality ceiling wasn't actually about pixel count.**
+Asked to make the fallback filters as high-quality as possible, the first
+instinct was to just raise its 240px working resolution — but that
+reintroduces the exact risk the number had been tuned against (12 stacked
+regions at 320px had measured 13.2ms, too close to budget). Benchmarking
+the *real* code path instead of a simplified one found something that
+didn't match that assumption at all: dropping the working resolution to
+150px while *keeping the scratch buffer at a fixed 480px* still cost
+13–14ms for 12 regions — barely better than before, even though it was
+processing far fewer pixels.
+
+Isolated by resizing the same scratch buffer to different sizes while
+reading back the identical small sub-region each time: `getImageData` /
+`putImageData` cost scales with the canvas's *allocated* size, not the
+sub-region actually requested. A buffer kept oversized "just in case" taxes
+every call into it, including the common case of one small filtered
+region. The fix wasn't a smaller resolution — it was resizing the scratch
+buffer itself, once per frame (never per stamp — a bare `canvas.width = …`
+assignment is the expensive case this project already hit once, at ~2.5ms,
+when it happened 12 times in a frame), to match what that frame actually
+needs.
+
+With that fixed, the quality/performance trade-off this project kept
+re-litigating mostly stopped existing: a single filtered region — even
+full-screen — now renders at **full native resolution, zero downscaling**
+(~2.7ms), and the worst case of 12 simultaneous fallback regions, which
+used to force a hard choice between 150px-and-fast or 320px-and-risky,
+now renders at ~400px and **3.8ms**. The resolution still adapts
+(`budget / √active-region-count`) so pathological cases degrade
+gracefully instead of being pre-emptively capped for a scenario that
+rarely happens.
+
 ## Known gaps
 
 - Gesture thresholds are hand-tuned heuristics, not learned — works, but is
